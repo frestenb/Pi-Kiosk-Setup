@@ -10,7 +10,8 @@ Skapa användare `kiosk` och aktivera SSH.
 Logga in via SSH och kör:
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/frestenb/Pi-Kiosk-Setup/main/setup.sh | sudo bash
+curl -sSL https://raw.githubusercontent.com/frestenb/Pi-Kiosk-Setup/main/setup.sh -o setup.sh
+sudo bash setup.sh
 ```
 
 Följ instruktionerna på skärmen.
