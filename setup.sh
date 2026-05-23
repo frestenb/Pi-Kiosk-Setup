@@ -2,7 +2,7 @@
 # ═══════════════════════════════════════════════════════════════════════════════
 # Raspberry Pi Kiosk Setup
 # ═══════════════════════════════════════════════════════════════════════════════
-# Ladda ner och kör: 
+# Ladda ner och kör:
 #   curl -sSL https://raw.githubusercontent.com/frestenb/Pi-Kiosk-Setup/main/setup.sh -o setup.sh
 #   sudo bash setup.sh
 # ───────────────────────────────────────────────────────────────────────────────
@@ -22,6 +22,9 @@ warn()    { echo -e "${YELLOW}[VARNING]${NC} $1"; }
 error()   { echo -e "${RED}[FEL]${NC} $1"; exit 1; }
 section() { echo -e "\n${BLUE}━━━ $1 ━━━${NC}"; }
 
+# ── Felhantering ──────────────────────────────────────────────────────────────
+trap 'echo -e "\n${RED}[FEL]${NC} Scriptet kraschade på rad $LINENO. Kontrollera setup-loggen: ${KIOSK_HOME}/setup.log"; exit 1' ERR
+
 # ── Kontrollera att scriptet körs som root ────────────────────────────────────
 if [ "$EUID" -ne 0 ]; then
     error "Kör scriptet som root: sudo bash setup.sh"
@@ -31,8 +34,8 @@ KIOSK_USER="kiosk"
 KIOSK_HOME="/home/${KIOSK_USER}"
 
 # ── Loggning ──────────────────────────────────────────────────────────────────
-LOG_FILE="${KIOSK_HOME}/setup.log"
 mkdir -p "${KIOSK_HOME}"
+LOG_FILE="${KIOSK_HOME}/setup.log"
 exec > >(tee "${LOG_FILE}") 2>&1
 info "Logg sparas till: ${LOG_FILE}"
 
@@ -103,9 +106,17 @@ sed -i "s/127.0.1.1.*/127.0.1.1\t${HOSTNAME}/" /etc/hosts
 log "Hostname satt till: $HOSTNAME"
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# STEG 4 — SSH-säkerhet
+# STEG 4 — Tidszon och NTP
 # ═══════════════════════════════════════════════════════════════════════════════
-section "Steg 4 — Konfigurerar SSH"
+section "Steg 4 — Konfigurerar tidszon och NTP"
+timedatectl set-timezone Europe/Stockholm
+timedatectl set-ntp true
+log "Tidszon satt till Europe/Stockholm och NTP aktiverat."
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# STEG 5 — SSH-säkerhet
+# ═══════════════════════════════════════════════════════════════════════════════
+section "Steg 5 — Konfigurerar SSH"
 SSH_CONFIG="/etc/ssh/sshd_config"
 
 sed -i "s/^#\?Port .*/Port ${SSH_PORT}/" "$SSH_CONFIG"
@@ -125,9 +136,9 @@ if [ "$SSH_PORT" != "22" ]; then
 fi
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# STEG 5 — Brandvägg (UFW)
+# STEG 6 — Brandvägg (UFW)
 # ═══════════════════════════════════════════════════════════════════════════════
-section "Steg 5 — Konfigurerar brandvägg"
+section "Steg 6 — Konfigurerar brandvägg"
 apt install -y ufw
 
 ufw --force reset
@@ -144,18 +155,52 @@ ufw --force enable
 log "UFW brandvägg aktiverad."
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# STEG 6 — Automatiska säkerhetsuppdateringar
+# STEG 7 — fail2ban
 # ═══════════════════════════════════════════════════════════════════════════════
-section "Steg 6 — Automatiska säkerhetsuppdateringar"
+section "Steg 7 — Installerar och konfigurerar fail2ban"
+apt install -y fail2ban
+
+cat > /etc/fail2ban/jail.d/kiosk-ssh.conf << EOF
+[sshd]
+enabled = true
+port = ${SSH_PORT}
+maxretry = 3
+findtime = 600
+bantime = 3600
+
+[sshd-aggressive]
+enabled = true
+filter = sshd
+port = ${SSH_PORT}
+maxretry = 5
+findtime = 86400
+bantime = -1
+logpath = %(sshd_log)s
+EOF
+
+systemctl enable fail2ban
+systemctl restart fail2ban
+log "fail2ban konfigurerat."
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# STEG 8 — Automatiska säkerhetsuppdateringar
+# ═══════════════════════════════════════════════════════════════════════════════
+section "Steg 8 — Automatiska säkerhetsuppdateringar"
 apt install -y unattended-upgrades
 echo unattended-upgrades unattended-upgrades/enable_auto_updates boolean true | debconf-set-selections
 dpkg-reconfigure -f noninteractive unattended-upgrades
+
+# APT autocleaner
+cat > /etc/apt/apt.conf.d/99-autoclean << 'EOF'
+APT::Periodic::AutocleanInterval "7";
+EOF
+
 log "Automatiska säkerhetsuppdateringar aktiverade."
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# STEG 7 — Inaktivera onödiga tjänster
+# STEG 9 — Inaktivera onödiga tjänster
 # ═══════════════════════════════════════════════════════════════════════════════
-section "Steg 7 — Inaktiverar onödiga tjänster"
+section "Steg 9 — Inaktiverar onödiga tjänster"
 for SERVICE in bluetooth cups cups-browsed ModemManager; do
     if systemctl list-unit-files | grep -q "^${SERVICE}.service"; then
         systemctl disable --now "${SERVICE}.service" && log "${SERVICE} inaktiverad."
@@ -165,16 +210,16 @@ for SERVICE in bluetooth cups cups-browsed ModemManager; do
 done
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# STEG 8 — Installera paket
+# STEG 10 — Installera paket
 # ═══════════════════════════════════════════════════════════════════════════════
-section "Steg 8 — Installerar paket"
+section "Steg 10 — Installerar paket"
 apt install -y wayfire chromium rpi-chromium-mods seatd
 log "Paket installerade."
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# STEG 9 — Konfigurera grupper och seatd
+# STEG 11 — Konfigurera grupper och seatd
 # ═══════════════════════════════════════════════════════════════════════════════
-section "Steg 9 — Konfigurerar grupper och seatd"
+section "Steg 11 — Konfigurerar grupper och seatd"
 groupadd seat 2>/dev/null || true
 usermod -aG video,input,tty,seat "$KIOSK_USER"
 systemctl enable seatd || true
@@ -182,9 +227,36 @@ systemctl start seatd || true
 log "Grupper och seatd konfigurerade."
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# STEG 10 — Inaktivera boot-splash
+# STEG 12 — Minska SD-kortsskrivningar (noatime)
 # ═══════════════════════════════════════════════════════════════════════════════
-section "Steg 10 — Inaktiverar boot-splash"
+section "Steg 12 — Optimerar filsystem för SD-kort"
+if ! grep -q "noatime" /etc/fstab; then
+    sed -i 's/defaults/defaults,noatime/' /etc/fstab
+    log "noatime aktiverat i fstab."
+else
+    info "noatime redan aktiverat."
+fi
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# STEG 13 — Konfigurera systemd-journald
+# ═══════════════════════════════════════════════════════════════════════════════
+section "Steg 13 — Begränsar systemloggar"
+mkdir -p /etc/systemd/journald.conf.d
+cat > /etc/systemd/journald.conf.d/kiosk.conf << 'EOF'
+[Journal]
+SystemMaxUse=50M
+SystemMaxFileSize=10M
+RuntimeMaxUse=20M
+Storage=persistent
+EOF
+
+systemctl restart systemd-journald
+log "Journald begränsad till 50MB."
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# STEG 14 — Inaktivera boot-splash
+# ═══════════════════════════════════════════════════════════════════════════════
+section "Steg 14 — Inaktiverar boot-splash"
 CMDLINE="/boot/firmware/cmdline.txt"
 if ! grep -q "quiet logo.nologo" "$CMDLINE"; then
     sed -i 's/$/ quiet logo.nologo/' "$CMDLINE"
@@ -194,16 +266,16 @@ else
 fi
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# STEG 11 — Inaktivera getty på TTY1
+# STEG 15 — Inaktivera getty på TTY1
 # ═══════════════════════════════════════════════════════════════════════════════
-section "Steg 11 — Inaktiverar getty på TTY1"
+section "Steg 15 — Inaktiverar getty på TTY1"
 systemctl disable getty@tty1
 log "getty@tty1 inaktiverad."
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# STEG 12 — Skapa konfigfil
+# STEG 16 — Skapa konfigfil
 # ═══════════════════════════════════════════════════════════════════════════════
-section "Steg 12 — Skapar konfigfil"
+section "Steg 16 — Skapar konfigfil"
 mkdir -p "${KIOSK_HOME}/.config"
 
 cat > "${KIOSK_HOME}/.config/kiosk.conf" << EOF
@@ -228,16 +300,16 @@ chmod 600 "${KIOSK_HOME}/.config/kiosk.conf"
 log "Konfigfil skapad: ${KIOSK_HOME}/.config/kiosk.conf"
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# STEG 13 — Konfigurera Wayfire
+# STEG 17 — Konfigurera Wayfire
 # ═══════════════════════════════════════════════════════════════════════════════
-section "Steg 13 — Konfigurerar Wayfire"
+section "Steg 17 — Konfigurerar Wayfire"
 
 cat > "${KIOSK_HOME}/.config/wayfire.ini" << EOF
 [core]
 plugins = autostart
 
 [autostart]
-chromium = chromium --noerrdialogs --disable-infobars --no-first-run --disable-session-crashed-bubble --disable-restore-session-state --kiosk --disable-features=TranslateUI,Translate --lang=sv --accept-lang=sv ${KIOSK_URL}
+chromium = chromium --noerrdialogs --disable-infobars --no-first-run --disable-session-crashed-bubble --disable-restore-session-state --kiosk --disable-features=TranslateUI,Translate --lang=sv --accept-lang=sv --disk-cache-size=52428800 ${KIOSK_URL}
 watchdog = bash ${KIOSK_HOME}/kiosk_watchdog.sh
 EOF
 
@@ -245,9 +317,9 @@ chown "${KIOSK_USER}:${KIOSK_USER}" "${KIOSK_HOME}/.config/wayfire.ini"
 log "Wayfire konfigurerat."
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# STEG 14 — Konfigurera Chromium-profil
+# STEG 18 — Konfigurera Chromium-profil
 # ═══════════════════════════════════════════════════════════════════════════════
-section "Steg 14 — Konfigurerar Chromium-profil"
+section "Steg 18 — Konfigurerar Chromium-profil"
 mkdir -p "${KIOSK_HOME}/.config/chromium/Default"
 cat > "${KIOSK_HOME}/.config/chromium/Default/Preferences" << 'EOF'
 {
@@ -264,9 +336,9 @@ chown -R "${KIOSK_USER}:${KIOSK_USER}" "${KIOSK_HOME}/.config/chromium"
 log "Chromium-profil konfigurerad."
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# STEG 15 — Skapa systemd-tjänst för Wayfire
+# STEG 19 — Skapa systemd-tjänst för Wayfire
 # ═══════════════════════════════════════════════════════════════════════════════
-section "Steg 15 — Skapar systemd-tjänst"
+section "Steg 19 — Skapar systemd-tjänst"
 cat > /etc/systemd/system/kiosk.service << EOF
 [Unit]
 Description=Kiosk
@@ -293,9 +365,9 @@ systemctl daemon-reload
 log "Systemd-tjänst skapad och aktiverad."
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# STEG 16 — Skapa watchdog-script
+# STEG 20 — Skapa watchdog-script
 # ═══════════════════════════════════════════════════════════════════════════════
-section "Steg 16 — Skapar watchdog-script"
+section "Steg 20 — Skapar watchdog-script"
 cat > "${KIOSK_HOME}/kiosk_watchdog.sh" << 'EOF'
 #!/bin/bash
 
@@ -313,6 +385,7 @@ echo $$ > "$PIDFILE"
 
 DEVICE=$(hostname)
 NOTIFIED=false
+DISK_NOTIFIED=false
 
 log() {
     echo "$(date '+%Y-%m-%d %H:%M:%S') $1" >> "$LOG"
@@ -321,7 +394,7 @@ log() {
 send_mail() {
     local SUBJECT="$1"
     local MESSAGE="$2"
-    curl -s --ssl-reqd \
+    curl -sL --ssl-reqd \
         --url "smtp://$SMTP_HOST:$SMTP_PORT" \
         --user "$SMTP_USER:$SMTP_PASS" \
         --mail-from "$SMTP_USER" \
@@ -331,25 +404,45 @@ send_mail() {
 
 reload_browser() {
     log "Startar om Chromium..."
-    pkill chromium
+    pkill chromium 2>/dev/null || true
     sleep 3
     rm -f /home/kiosk/.config/chromium/Singleton*
     WAYLAND_DISPLAY=wayland-1 XDG_RUNTIME_DIR=/run/user/1000 chromium \
         --noerrdialogs --disable-infobars --no-first-run \
         --disable-session-crashed-bubble --disable-restore-session-state \
         --kiosk --disable-features=TranslateUI,Translate \
-        --lang=sv --accept-lang=sv "$URL" &
+        --lang=sv --accept-lang=sv --disk-cache-size=52428800 "$URL" &
     log "Chromium omstartad."
 }
 
 check_url() {
-    curl -s -o /dev/null -w "%{http_code}" --max-time 5 "$URL"
+    curl -sL -o /dev/null -w "%{http_code}" --max-time 5 "$URL"
 }
+
+check_disk() {
+    DISK_USAGE=$(df / | awk 'NR==2 {print $5}' | tr -d '%')
+    if [ "$DISK_USAGE" -gt 80 ]; then
+        if [ "$DISK_NOTIFIED" = false ]; then
+            MSG="⚠️ $DEVICE – Diskutrymme kritiskt! Användning: ${DISK_USAGE}% av /"
+            send_mail "[$DEVICE] VARNING: Disk nästan full" "$MSG"
+            log "Disk-larm skickat: ${DISK_USAGE}%"
+            DISK_NOTIFIED=true
+        fi
+    else
+        DISK_NOTIFIED=false
+    fi
+}
+
+# Rensa Singleton-filer vid start
+rm -f /home/kiosk/.config/chromium/Singleton*
 
 sleep 30
 log "=== Watchdog startad. Övervakar: $URL ==="
 
 while true; do
+    # Kolla disk var 10:e minut
+    check_disk
+
     HTTP=$(check_url)
     if [ "$HTTP" == "200" ]; then
         if [ "$NOTIFIED" = true ]; then
@@ -380,15 +473,35 @@ chown "${KIOSK_USER}:${KIOSK_USER}" "${KIOSK_HOME}/kiosk_watchdog.sh"
 log "Watchdog-script skapat."
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# STEG 21 — Logrotate för watchdog
+# ═══════════════════════════════════════════════════════════════════════════════
+section "Steg 21 — Konfigurerar logrotate"
+cat > /etc/logrotate.d/kiosk-watchdog << 'EOF'
+/home/kiosk/kiosk_watchdog.log {
+    daily
+    rotate 7
+    compress
+    missingok
+    notifempty
+    copytruncate
+}
+EOF
+log "Logrotate konfigurerat."
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# STEG 22 — Nattlig omstart av Chromium (cron)
+# ═══════════════════════════════════════════════════════════════════════════════
+section "Steg 22 — Nattlig omstart av Chromium"
+(crontab -u "${KIOSK_USER}" -l 2>/dev/null; echo "0 3 * * * pkill chromium; sleep 3; rm -f /home/kiosk/.config/chromium/Singleton*") | crontab -u "${KIOSK_USER}" -
+log "Nattlig omstart av Chromium kl 03:00 konfigurerad."
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # KLART
 # ═══════════════════════════════════════════════════════════════════════════════
 echo ""
 echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo -e "${GREEN}  Setup klar! Starta om för att aktivera kiosken.${NC}"
 echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo ""
-echo -e "  ${YELLOW}Starta om:${NC}"
-echo -e "  sudo reboot"
 echo ""
 echo -e "  ${YELLOW}Om du ändrar konfigfilen senare:${NC}"
 echo -e "  sudo systemctl restart kiosk"
@@ -397,3 +510,11 @@ echo ""
 echo -e "  ${YELLOW}Setup-logg sparad till:${NC}"
 echo -e "  ${LOG_FILE}"
 echo ""
+
+echo -e "${YELLOW}Startar om automatiskt om 15 sekunder... (Ctrl+C för att avbryta)${NC}"
+for i in $(seq 15 -1 1); do
+    echo -ne "  Omstart om ${i} sekunder...\r"
+    sleep 1
+done
+echo ""
+reboot
