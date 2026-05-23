@@ -2,7 +2,9 @@
 # ═══════════════════════════════════════════════════════════════════════════════
 # Raspberry Pi Kiosk Setup
 # ═══════════════════════════════════════════════════════════════════════════════
-# Kör som: sudo bash setup.sh
+# Ladda ner och kör: 
+#   curl -sSL https://raw.githubusercontent.com/frestenb/Pi-Kiosk-Setup/main/setup.sh -o setup.sh
+#   sudo bash setup.sh
 # ───────────────────────────────────────────────────────────────────────────────
 
 set -e
@@ -27,6 +29,12 @@ fi
 
 KIOSK_USER="kiosk"
 KIOSK_HOME="/home/${KIOSK_USER}"
+
+# ── Loggning ──────────────────────────────────────────────────────────────────
+LOG_FILE="${KIOSK_HOME}/setup.log"
+mkdir -p "${KIOSK_HOME}"
+exec > >(tee "${LOG_FILE}") 2>&1
+info "Logg sparas till: ${LOG_FILE}"
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # KONFIGURATION — Fråga efter inställningar
@@ -167,10 +175,10 @@ log "Paket installerade."
 # STEG 9 — Konfigurera grupper och seatd
 # ═══════════════════════════════════════════════════════════════════════════════
 section "Steg 9 — Konfigurerar grupper och seatd"
-groupadd seat 2>/dev/null || info "Gruppen seat finns redan."
+groupadd seat 2>/dev/null || true
 usermod -aG video,input,tty,seat "$KIOSK_USER"
-systemctl enable seatd
-systemctl start seatd
+systemctl enable seatd || true
+systemctl start seatd || true
 log "Grupper och seatd konfigurerade."
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -376,13 +384,16 @@ log "Watchdog-script skapat."
 # ═══════════════════════════════════════════════════════════════════════════════
 echo ""
 echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${GREEN}  Setup klar!${NC}"
+echo -e "${GREEN}  Setup klar! Starta om för att aktivera kiosken.${NC}"
 echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
-echo -e "  ${YELLOW}Starta om för att aktivera kiosken:${NC}"
+echo -e "  ${YELLOW}Starta om:${NC}"
 echo -e "  sudo reboot"
 echo ""
-echo -e "  ${YELLOW}Om du ändrar konfigfilen senare, starta om tjänsterna:${NC}"
+echo -e "  ${YELLOW}Om du ändrar konfigfilen senare:${NC}"
 echo -e "  sudo systemctl restart kiosk"
 echo -e "  pkill -f kiosk_watchdog.sh && rm -f /tmp/kiosk_watchdog.pid"
+echo ""
+echo -e "  ${YELLOW}Setup-logg sparad till:${NC}"
+echo -e "  ${LOG_FILE}"
 echo ""
