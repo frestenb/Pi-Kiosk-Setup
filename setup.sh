@@ -304,6 +304,10 @@ watchdog = bash ${KIOSK_HOME}/kiosk_watchdog.sh
 EOF
 
 chown "${KIOSK_USER}:${KIOSK_USER}" "${KIOSK_HOME}/.config/wayfire.ini"
+
+# Skapa Wayfire metadata-katalog för att undvika varning vid start
+mkdir -p "${KIOSK_HOME}/.local/share/wayfire/metadata"
+chown -R "${KIOSK_USER}:${KIOSK_USER}" "${KIOSK_HOME}/.local"
 log "Wayfire konfigurerat."
 
 # ═══════════════════════════════════════════════════════════════════════════════
