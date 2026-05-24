@@ -136,7 +136,7 @@ if [ "$SSH_PORT" != "22" ]; then
 fi
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# STEG 6 — Brandvägg (UFW)
+# STEG 6 — Brandvägg (UFW) — installeras och konfigureras men aktiveras vid boot
 # ═══════════════════════════════════════════════════════════════════════════════
 section "Steg 6 — Konfigurerar brandvägg"
 apt install -y ufw
@@ -150,9 +150,8 @@ ufw allow out 80
 ufw allow out 443
 ufw allow out 53
 ufw allow out 587
-ufw --force enable
 
-log "UFW brandvägg aktiverad."
+log "UFW brandväggsregler konfigurerade (aktiveras vid omstart)."
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # STEG 7 — fail2ban
@@ -483,7 +482,7 @@ log "Logrotate konfigurerat."
 # STEG 22 — Nattlig omstart av Chromium (cron)
 # ═══════════════════════════════════════════════════════════════════════════════
 section "Steg 22 — Nattlig omstart av Chromium"
-(crontab -u "${KIOSK_USER}" -l 2>/dev/null; echo "0 3 * * * pkill chromium; sleep 3; rm -f /home/kiosk/.config/chromium/Singleton*") | crontab -u "${KIOSK_USER}" -
+(crontab -u "${KIOSK_USER}" -l 2>/dev/null; echo "0 3 * * * pkill chromium; sleep 3; rm -f /home/kiosk/.config/chromium/Singleton*") | sudo crontab -u "${KIOSK_USER}" -
 log "Nattlig omstart av Chromium kl 03:00 konfigurerad."
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -501,6 +500,13 @@ echo ""
 echo -e "  ${YELLOW}Setup-logg sparad till:${NC}"
 echo -e "  ${LOG_FILE}"
 echo ""
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# STEG 23 — Aktivera brandvägg
+# ═══════════════════════════════════════════════════════════════════════════════
+section "Steg 23 — Aktiverar brandvägg"
+ufw enable
+log "UFW brandvägg aktiverad."
 
 echo -e "${YELLOW}Startar om automatiskt om 15 sekunder... (Ctrl+C för att avbryta)${NC}"
 for i in $(seq 15 -1 1); do
