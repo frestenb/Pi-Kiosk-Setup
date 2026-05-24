@@ -490,11 +490,14 @@ section "Steg 22 — Nattlig omstart av Chromium"
 log "Nattlig omstart av Chromium kl 03:00 konfigurerad."
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# KLART
+# STEG 23 — Aktivera brandvägg
 # ═══════════════════════════════════════════════════════════════════════════════
+section "Steg 23 — Aktiverar brandvägg och startar om automatiskt"
+log "UFW brandvägg aktiveras vid omstart."
+
 echo ""
 echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${GREEN}  Setup klar! Starta om för att aktivera kiosken.${NC}"
+echo -e "${GREEN}  Setup klar! Kiosken kommer snart starta om för att aktiveras.${NC}"
 echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
 echo -e "  ${YELLOW}Om du ändrar konfigfilen senare:${NC}"
@@ -504,12 +507,6 @@ echo ""
 echo -e "  ${YELLOW}Setup-logg sparad till:${NC}"
 echo -e "  ${LOG_FILE}"
 echo ""
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# STEG 23 — Aktivera brandvägg
-# ═══════════════════════════════════════════════════════════════════════════════
-section "Steg 23 — Aktiverar brandvägg och startar om automatiskt"
-log "UFW brandvägg aktiveras vid omstart."
 echo -e "${YELLOW}Startar om automatiskt om 10 sekunder... (Ctrl+C för att avbryta)${NC}"
 for i in $(seq 10 -1 1); do
     echo -ne "  Omstart om ${i} sekunder...\r"
