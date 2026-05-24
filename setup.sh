@@ -483,7 +483,7 @@ log "Logrotate konfigurerat."
 # STEG 22 — Nattlig omstart av Chromium (cron)
 # ═══════════════════════════════════════════════════════════════════════════════
 section "Steg 22 — Nattlig omstart av Chromium"
-(crontab -u "${KIOSK_USER}" -l 2>/dev/null; echo "0 3 * * * pkill chromium; sleep 3; rm -f /home/kiosk/.config/chromium/Singleton*") | sudo crontab -u "${KIOSK_USER}" -
+(crontab -u "${KIOSK_USER}" -l 2>/dev/null; echo "0 3 * * * pkill chromium; sleep 3; rm -f /home/kiosk/.config/chromium/Singleton*") | crontab -u "${KIOSK_USER}" -
 log "Nattlig omstart av Chromium kl 03:00 konfigurerad."
 
 # ═══════════════════════════════════════════════════════════════════════════════
