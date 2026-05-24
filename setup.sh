@@ -508,7 +508,7 @@ echo ""
 # ═══════════════════════════════════════════════════════════════════════════════
 # STEG 23 — Aktivera brandvägg
 # ═══════════════════════════════════════════════════════════════════════════════
-section "Steg 23 — Aktiverar brandvägg"
+section "Steg 23 — Aktiverar brandvägg och startar om automatiskt om 15 sekunder..."
 ufw enable
 log "UFW brandvägg aktiverad."
 
